@@ -71,6 +71,8 @@ void print_char_func(void *d);
 
 avltree *avl_create(int (*compare_func)(const void *, const void *),
                     void (*destroy_func)(void *));
+avltree avl_create_no_alloc(int (*compare_func)(const void *, const void *),
+                    void (*destroy_func)(void *));
 void avl_destroy(avltree *avlt);
 
 avlnode *avl_find(avltree *avlt, void *data);
