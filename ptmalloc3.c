@@ -778,12 +778,13 @@ public_mALLOc(size_t bytes)
   arena_get(ar_ptr, bytes + FOOTER_OVERHEAD);
   if (!ar_ptr)
     return 0;
-  ar_ptr->malloc_count++;
   if (ar_ptr != &main_arena)
     bytes += FOOTER_OVERHEAD;
   victim = mspace_malloc(arena_to_mspace(ar_ptr), bytes);
   if (victim && ar_ptr != &main_arena)
     set_non_main_arena(victim, ar_ptr);
+  ar_ptr->malloc_count++;
+  insert_segment(ar_ptr->segments, ptr, sz, false);
   (void)mutex_unlock(&ar_ptr->mutex);
   assert(!victim || is_mmapped(mem2chunk(victim)) ||
 	 ar_ptr == arena_for_chunk(mem2chunk(victim)));
@@ -828,6 +829,7 @@ public_fREe(void* mem)
   (void)mutex_lock(&ar_ptr->mutex);
 #endif
   mspace_free(arena_to_mspace(ar_ptr), mem);
+  free_segment_ptr(ptr, false);
   (void)mutex_unlock(&ar_ptr->mutex);
 }
 #ifdef libc_hidden_def
@@ -882,6 +884,9 @@ public_rEALLOc(void* oldmem, size_t bytes)
 
   if (newp && ar_ptr != &main_arena)
     set_non_main_arena(newp, ar_ptr);
+
+  update_segment(oldmem, bytes, new_p, new_sz, bytes);
+
   (void)mutex_unlock(&ar_ptr->mutex);
 
   assert(!newp || is_mmapped(mem2chunk(newp)) ||
@@ -1192,7 +1197,11 @@ int malloc_count(void* mem){
   return ar_ptr->malloc_count;
 }
 
+// dummy function here for compatibility with older version of lffi
+void __lffi_init() { }
 
+// dummy function here for compatibility with older version of lffi
+void __lffi_cleanup() { }
 /*
  * Local variables:
  * c-basic-offset: 2

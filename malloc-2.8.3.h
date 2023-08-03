@@ -376,6 +376,13 @@ size_t dlmalloc_usable_size(void*);
 /* Custom function to return number of mallocs in pointer's arena */
 int malloc_count(void*);
 
+// dummy function here for compatibility with older version of lffi
+void __lffi_init();
+
+// dummy function here for compatibility with older version of lffi
+void __lffi_cleanup();
+
+
 /*
   malloc_stats();
   Prints on stderr the amount of space obtained from the system (both
