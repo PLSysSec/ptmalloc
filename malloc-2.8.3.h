@@ -372,6 +372,10 @@ int  dlmalloc_trim(size_t);
 */
 size_t dlmalloc_usable_size(void*);
 
+
+/* Custom function to return number of mallocs in pointer's arena */
+int malloc_count(void*);
+
 /*
   malloc_stats();
   Prints on stderr the amount of space obtained from the system (both

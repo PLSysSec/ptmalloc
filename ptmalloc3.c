@@ -239,6 +239,7 @@ struct malloc_arena {
 
   /* Used for finding segment bounds */
   avltree segments;
+  int malloc_count;
 
   /* Linked list */
   struct malloc_arena *next;
@@ -382,7 +383,8 @@ _int_new_arena(size_t size)
   a = CALL_MMAP(mmap_sz);
   if ((char*)a == (char*)-1)
     return 0;
-
+  a->segments = avl_create_no_alloc(compare_func, destroy_func);
+  a->malloc_count = 0;
   m = create_mspace_with_base((char*)a + MSPACE_OFFSET,
 			      mmap_sz - MSPACE_OFFSET,
 			      0);
@@ -715,6 +717,7 @@ ptmalloc_init(void)
 				   sizeof(main_arena) - MSPACE_OFFSET,
 				   0);
   main_arena.segments = avl_create_no_alloc(compare_func, destroy_func);
+  main_arena.malloc_count = 0;
   assert(mspace == arena_to_mspace(&main_arena));
 
   mutex_init(&list_lock);
@@ -775,6 +778,7 @@ public_mALLOc(size_t bytes)
   arena_get(ar_ptr, bytes + FOOTER_OVERHEAD);
   if (!ar_ptr)
     return 0;
+  ar_ptr->malloc_count++;
   if (ar_ptr != &main_arena)
     bytes += FOOTER_OVERHEAD;
   victim = mspace_malloc(arena_to_mspace(ar_ptr), bytes);
@@ -1172,6 +1176,22 @@ public_mSTATs(void)
     fprintf(stderr, "starter hooks    = %10ld\n", main_arena.stat_starter);
 #endif
 }
+
+
+int malloc_count(void* mem){
+    struct malloc_arena* ar_ptr;
+    mchunkptr p = mem2chunk(mem);
+
+  if (is_mmapped(p)) {                      /* release mmapped memory. */
+    ar_ptr = arena_for_mmap_chunk(p);
+  }
+  else{
+    ar_ptr = arena_for_chunk(p);
+  }
+
+  return ar_ptr->malloc_count;
+}
+
 
 /*
  * Local variables:
