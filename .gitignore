@@ -1,0 +1,5 @@
+*.o
+*.a
+t-test1
+t-test2
+tst-independent-alloc
