@@ -186,6 +186,44 @@ void *(*__morecore)(ptrdiff_t) = __default_morecore;
 
 /*----------------------------------------------------------------------*/
 
+/*
+Custom avl helpers for ptmalloc
+*/
+void free_segment(avltree* segs, void *ptr, size_t sz, bool rust) {
+  avlnode *node = avl_find(segs, make_segment(ptr, sz, rust));
+  assert(node != NULL);
+  avl_delete(segs, node, 0);
+}
+
+avlnode *remove_segment(avltree* segs, void *ptr, size_t sz, bool rust) {
+  avlnode *node = avl_find(segs, make_segment(ptr, sz, rust));
+  assert(node != NULL);
+  avl_delete(segs, node, true); // don't deallocate
+  return node;
+}
+
+size_t free_segment_ptr(avltree* segs, void *ptr, bool rust) {
+  size_t sz = malloc_usable_size(ptr);
+  free_segment(segs, ptr, sz, rust);
+  return sz;
+}
+
+void insert_segment(avltree* segs, void *ptr, size_t sz, bool rust) {
+  Segment *seg = make_segment(ptr, sz, rust);
+  avl_insert(segs, seg);
+}
+
+void update_segment(avltree* segs, void *ptr, size_t old_sz, void *new_ptr, size_t sz,
+                    bool rust) {
+  avlnode *node = remove_segment(segs, ptr, old_sz, rust);
+  Segment *seg = (Segment *)(node->data);
+  seg->ptr = new_ptr;
+  seg->size = sz;
+  avl_insert(segs, node);
+}
+
+
+
 /* Arenas */
 static tsd_key_t arena_key;
 static mutex_t list_lock;
