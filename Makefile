@@ -41,7 +41,7 @@ RM        = rm -f
 AR        = ar
 RANLIB    = ranlib
 
-MALLOC_OBJ = ptmalloc3.o malloc.o
+MALLOC_OBJ = ptmalloc3.o malloc.o avl.o
 LIB_MALLOC = libptmalloc3.a
 
 T_SUF =
@@ -56,7 +56,10 @@ CFLAGS = $(SYS_FLAGS) $(OPT_FLAGS) $(WARN_FLAGS) $(THR_FLAGS) $(INC_FLAGS)
 
 all: $(LIB_MALLOC) $(TESTS)
 
-ptmalloc3.o: ptmalloc3.c malloc-2.8.3.h
+avl.o: avl.c avl.h 
+	$(CC) -c $(CFLAGS) $<
+
+ptmalloc3.o: ptmalloc3.c malloc-2.8.3.h avl.h 
 	$(CC) -c $(CFLAGS) $(M_FLAGS) -DMSPACES=1 $<
 
 malloc.o: malloc.c

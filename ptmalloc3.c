@@ -44,6 +44,7 @@ PERFORMANCE OF THIS SOFTWARE.
 #include <malloc-machine.h>
 
 #include "malloc-2.8.3.h"
+#include "avl.h"
 
 /* ----------------------------------------------------------------------- */
 
@@ -197,6 +198,9 @@ struct malloc_arena {
   /* Statistics for locking.  Only used if THREAD_STATS is defined.  */
   long stat_lock_direct, stat_lock_loop, stat_lock_wait;
   long stat_starter;
+
+  /* Used for finding segment bounds */
+  avltree segments;
 
   /* Linked list */
   struct malloc_arena *next;
@@ -672,6 +676,7 @@ ptmalloc_init(void)
   mspace = create_mspace_with_base((char*)&main_arena + MSPACE_OFFSET,
 				   sizeof(main_arena) - MSPACE_OFFSET,
 				   0);
+  main_arena.segments = avl_create_no_alloc(compare_func, destroy_func);
   assert(mspace == arena_to_mspace(&main_arena));
 
   mutex_init(&list_lock);
@@ -726,6 +731,8 @@ public_mALLOc(size_t bytes)
   void * (*hook) (size_t, const void *) = __malloc_hook;
   if (hook != NULL)
     return (*hook)(bytes, RETURN_ADDRESS (0));
+
+
 
   arena_get(ar_ptr, bytes + FOOTER_OVERHEAD);
   if (!ar_ptr)
