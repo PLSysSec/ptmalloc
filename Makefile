@@ -212,3 +212,19 @@ dist:
 
 # dependencies
 ptmalloc3.o: malloc-private.h
+
+
+RUST_LIB := ffi_tests
+RUST_LIB_BASE := ../liquid-ffi/tests/ffi_tests
+RUST_LIB_PROFILE ?= debug # can be overridden to be release
+RUST_LIB_BIN := $(RUST_LIB_BASE)/target/$(RUST_LIB_PROFILE) 
+RUST_LIB_OUT := ./$(RUST_LIB).$(RUST_LIB_PROFILE)
+
+build-rust:
+	cd $(RUST_LIB_BASE) && cargo build
+
+build_benchmark: benchmark.cpp build-rust 
+	g++ $< -std=c++11 -g -o $(RUST_LIB_OUT) -L $(RUST_LIB_BIN) -l$(RUST_LIB) libptmalloc3.a -lc -lpthread
+
+run_benchmark: build_benchmark
+	LD_LIBRARY_PATH=$(RUST_LIB_BIN) $(RUST_LIB_OUT) /tmp/lffi_output.txt
