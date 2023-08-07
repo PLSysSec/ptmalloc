@@ -93,28 +93,28 @@ avltree *avl_create(int (*compare_func)(const void *, const void *),
 }
 
 /* Constructor without dynamic allocation, used for ptmalloc instrumentation */
-avltree avl_create_no_alloc(int (*compare_func)(const void *, const void *),
+void avl_create_no_alloc(avltree* avlt, int (*compare_func)(const void *, const void *),
                     void (*destroy_func)(void *)) {
-  avltree avlt;
+  // avltree avlt;
 
-  avlt.compare = compare_func;
-  avlt.destroy = destroy_func;
+  avlt->compare = compare_func;
+  avlt->destroy = destroy_func;
 
   /* sentinel node nil */
-  avlt.nil.left = avlt.nil.right = avlt.nil.parent = &avlt.nil;
-  avlt.nil.bf = 0;
-  avlt.nil.data = NULL;
+  avlt->nil.left = avlt->nil.right = avlt->nil.parent = AVL_NIL(avlt);
+  avlt->nil.bf = 0;
+  avlt->nil.data = NULL;
 
   /* sentinel node root */
-  avlt.root.left = avlt.root.right = avlt.root.parent = &avlt.nil;
-  avlt.root.bf = 0;
-  avlt.root.data = NULL;
+  avlt->root.left = avlt->root.right = avlt->root.parent = AVL_NIL(avlt);
+  avlt->root.bf = 0;
+  avlt->root.data = NULL;
 
 #ifdef AVL_MIN
-  avlt.min = NULL;
+  avlt->min = NULL;
 #endif
 
-  return avlt;
+  return;
 }
 
 /*
