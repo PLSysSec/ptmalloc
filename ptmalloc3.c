@@ -61,6 +61,17 @@ PERFORMANCE OF THIS SOFTWARE.
     ((struct malloc_state*)(mst))->footprint -= psize;    \
 } while (0)
 
+#define fetch_arena_pointer(ar_ptr, mem) do { \
+  mchunkptr p = mem2chunk(mem); \
+  if (is_mmapped(p)) {                      /* release mmapped memory. */\
+    ar_ptr = arena_for_mmap_chunk(p);\
+  }\
+  else{\
+    ar_ptr = arena_for_chunk(p);\
+  }\
+} while (0)
+
+
 /* ---------------------------------------------------------------------- */
 
 /* Minimum size for a newly created arena.  */
@@ -83,6 +94,9 @@ PERFORMANCE OF THIS SOFTWARE.
 
 /* Already initialized? */
 int __malloc_initialized = -1;
+
+// per-thread reentrancy guard
+__thread bool in_hook;
 
 #ifndef RETURN_ADDRESS
 # define RETURN_ADDRESS(X_) (NULL)
@@ -383,7 +397,7 @@ _int_new_arena(size_t size)
   a = CALL_MMAP(mmap_sz);
   if ((char*)a == (char*)-1)
     return 0;
-  a->segments = avl_create_no_alloc(compare_func, destroy_func);
+  avl_create_no_alloc(&a->segments, compare_func, destroy_func);
   a->malloc_count = 0;
   m = create_mspace_with_base((char*)a + MSPACE_OFFSET,
 			      mmap_sz - MSPACE_OFFSET,
@@ -716,7 +730,7 @@ ptmalloc_init(void)
   mspace = create_mspace_with_base((char*)&main_arena + MSPACE_OFFSET,
 				   sizeof(main_arena) - MSPACE_OFFSET,
 				   0);
-  main_arena.segments = avl_create_no_alloc(compare_func, destroy_func);
+  avl_create_no_alloc(&main_arena.segments, compare_func, destroy_func);
   main_arena.malloc_count = 0;
   assert(mspace == arena_to_mspace(&main_arena));
 
@@ -783,8 +797,13 @@ public_mALLOc(size_t bytes)
   victim = mspace_malloc(arena_to_mspace(ar_ptr), bytes);
   if (victim && ar_ptr != &main_arena)
     set_non_main_arena(victim, ar_ptr);
-  ar_ptr->malloc_count++;
-  insert_segment(ar_ptr->segments, ptr, sz, false);
+  
+  if (lffi_begin_hook()){
+    ar_ptr->malloc_count++;
+    insert_segment(&ar_ptr->segments, victim, bytes, false);
+    lffi_end_hook();
+  }
+
   (void)mutex_unlock(&ar_ptr->mutex);
   assert(!victim || is_mmapped(mem2chunk(victim)) ||
 	 ar_ptr == arena_for_chunk(mem2chunk(victim)));
@@ -829,7 +848,10 @@ public_fREe(void* mem)
   (void)mutex_lock(&ar_ptr->mutex);
 #endif
   mspace_free(arena_to_mspace(ar_ptr), mem);
-  free_segment_ptr(ptr, false);
+  if (lffi_begin_hook()){
+    free_segment_ptr(&ar_ptr->segments, mem, false);
+    lffi_end_hook();
+  }
   (void)mutex_unlock(&ar_ptr->mutex);
 }
 #ifdef libc_hidden_def
@@ -885,8 +907,10 @@ public_rEALLOc(void* oldmem, size_t bytes)
   if (newp && ar_ptr != &main_arena)
     set_non_main_arena(newp, ar_ptr);
 
-  update_segment(oldmem, bytes, new_p, new_sz, bytes);
-
+  if (lffi_begin_hook()){
+    update_segment(&ar_ptr->segments, oldmem, bytes, newp, bytes, false);
+    lffi_end_hook();
+  }
   (void)mutex_unlock(&ar_ptr->mutex);
 
   assert(!newp || is_mmapped(mem2chunk(newp)) ||
@@ -1183,25 +1207,71 @@ public_mSTATs(void)
 }
 
 
-int malloc_count(void* mem){
-    struct malloc_arena* ar_ptr;
-    mchunkptr p = mem2chunk(mem);
-
-  if (is_mmapped(p)) {                      /* release mmapped memory. */
-    ar_ptr = arena_for_mmap_chunk(p);
-  }
-  else{
-    ar_ptr = arena_for_chunk(p);
-  }
+int lffi_malloc_count(void* mem){
+  struct malloc_arena* ar_ptr;
+  fetch_arena_pointer(ar_ptr, mem);
 
   return ar_ptr->malloc_count;
 }
 
-// dummy function here for compatibility with older version of lffi
-void __lffi_init() { }
+// returns true if the hook should continue
+bool lffi_begin_hook() {
+  if (!in_hook) {
+    in_hook = true;
+    return true;
+  } else {
+    return false;
+  }
+}
 
-// dummy function here for compatibility with older version of lffi
-void __lffi_cleanup() { }
+void lffi_end_hook() {
+  assert(in_hook);
+  in_hook = false;
+}
+
+
+
+
+void lffi_record_rust_alloc(uint8_t *mem, size_t sz){
+  struct malloc_arena* ar_ptr;
+  fetch_arena_pointer(ar_ptr, mem);
+  ar_ptr->malloc_count++;
+  insert_segment(&ar_ptr->segments, mem, sz, true);
+} 
+
+void lffi_record_rust_dealloc(uint8_t *mem, size_t sz){
+  struct malloc_arena* ar_ptr;
+  fetch_arena_pointer(ar_ptr, mem);
+  free_segment_ptr(&ar_ptr->segments, mem, true);
+} 
+
+
+//TODO: i think this breaks if we get realloc'd from one arena to another
+void lffi_record_rust_realloc(uint8_t *oldmem, size_t sz, uint8_t *new_ptr, size_t new_sz){
+  struct malloc_arena* ar_ptr;
+  fetch_arena_pointer(ar_ptr, oldmem);
+  update_segment(&ar_ptr->segments, oldmem, sz, new_ptr, new_sz, false);
+} 
+
+/*
+
+// Hook guards for rust hooks are in lffi_tracing_allocator
+void __lffi_record_rust_alloc(uint8_t *ptr, size_t sz) {
+  insert_segment(ptr, sz, true);
+  malloc_count++;
+}
+
+void __lffi_record_rust_dealloc(uint8_t *ptr, size_t sz) {
+  free_segment(ptr, sz, true);
+}
+
+void __lffi_record_rust_realloc(uint8_t *ptr, size_t sz, uint8_t *new_ptr,
+                                size_t new_sz) {
+  update_segment(ptr, sz, new_ptr, new_sz, true);
+}
+
+*/
+
 /*
  * Local variables:
  * c-basic-offset: 2

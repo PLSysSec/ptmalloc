@@ -30,6 +30,8 @@ extern "C" {
 #endif
 
 #include <stddef.h>   /* for size_t */
+#include <stdbool.h>
+
 
 #if !ONLY_MSPACES
 
@@ -374,14 +376,13 @@ size_t dlmalloc_usable_size(void*);
 
 
 /* Custom function to return number of mallocs in pointer's arena */
-int malloc_count(void*);
+int lffi_malloc_count(void*);
 
-// dummy function here for compatibility with older version of lffi
-void __lffi_init();
+// rentrancy guard
+bool lffi_begin_hook(void);
 
-// dummy function here for compatibility with older version of lffi
-void __lffi_cleanup();
-
+//reentrancy guard
+void lffi_end_hook(void);
 
 /*
   malloc_stats();
